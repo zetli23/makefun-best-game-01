@@ -1,103 +1,41 @@
-// "Zein's Number Duel" — a minimal, replayable guessing game (Node 22, stdlib only).
-// Entrypoint: main.ts  Run with:  node main.ts
+// A working best-game-01 entry (Node 22, standard library only): the game is this directory's
+// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
+// modules, no library and no network request), and the program hands it in. It copies game/ and
+// screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the
+// judge reads, with the vendored make.fun library. A starting point, not a winner: Block Dodger, a
+// plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a title screen,
+// score, lives and levels, game over and restart, flat colours and no sound. Build your own game
+// (any genre, any library you vendor under game/, or none), put your 3 or 4 PNG or JPEG screenshots
+// in screenshots/ (the first by name is the cover) and run it.
+//
+// Serve it locally with `node serve.ts`, then open http://localhost:8080.
+// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import * as readline from 'node:readline';
-import { createInterface } from 'node:readline';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildDossier } from './vendor/makefun-game.ts';
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false,
-});
+const here = fileURLToPath(new URL('.', import.meta.url));
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-const DIFFICULTIES = new Map([
-  ['easy', { min: 1, max: 50, lives: 8 }],
-  ['medium', { min: 1, max: 100, lives: 6 }],
-  ['hard', { min: 1, max: 200, lives: 4 }],
-]);
+mkdirSync(out, { recursive: true });
+cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
+mkdirSync(join(out, 'screenshots'), { recursive: true });
+if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 
-function ask(prompt: string): Promise<string> {
-  return new Promise((resolve) => rl.question(prompt, resolve));
-}
-
-function pick(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-async function playRound(diff: string, best: number | null): Promise<number | null> {
-  const d = DIFFICULTIES.get(diff)!;
-  const secret = pick(d.min, d.max);
-  let lives = d.lives;
-  let guesses = 0;
-
-  console.log(`\n┌─ ZEIN'S NUMBER DUEL ── ${diff.toUpperCase()} ──────────┐`);
-  console.log(`│ Saya pikir angka antara ${d.min} dan ${d.max}.`);
-  console.log(`│ Kamu punya ${lives} nyawa. Tebak!`);
-  console.log(`└───────────────────────────────────────────────┘`);
-
-  while (lives > 0) {
-    const raw = await ask(`\nTebakanmu (${d.min}–${d.max}), nyawa ${lives}: `);
-    const g = Number(raw.trim());
-    if (!Number.isFinite(g) || g < d.min || g > d.max) {
-      console.log('Masukkan angka yang valid.');
-      continue;
-    }
-    guesses++;
-    if (g === secret) {
-      console.log(`\n🎉 BENAR! Angkanya ${secret}. Kamu butuh ${guesses} tebakan.`);
-      if (best === null || guesses < best) {
-        console.log('🏆 SKOR TERBAIK BARU!');
-        return guesses;
-      }
-      console.log(`Skor terbaikmu: ${best}.`);
-      return best;
-    }
-    lives--;
-    console.log(g < secret ? 'Terlalu rendah.' : 'Terlalu tinggi.');
-    if (lives > 0) console.log(`Nyawa tersisa: ${lives}`);
-  }
-
-  console.log(`\n💀 Nyawa habis. Angkanya ${secret}.`);
-  return best;
-}
-
-async function main(): Promise<void> {
-  console.log('\n╔══════════════════════════════════════════╗');
-  console.log('║   ZEIN\u2019S NUMBER DUEL — Tebak Angka   ║');
-  console.log('╚══════════════════════════════════════════╝\n');
-
-  let best: number | null = null;
-  let playing = true;
-
-  while (playing) {
-    console.log('\nPilih tingkat kesulitan:');
-    console.log('  1. Easy   (1–50,  8 nyawa)');
-    console.log('  2. Medium (1–100, 6 nyawa)');
-    console.log('  3. Hard   (1–200, 4 nyawa)');
-    console.log('  4. Keluar');
-
-    const choice = (await ask('\nPilihan [1-4]: ')).trim();
-    if (choice === '4' || choice.toLowerCase() === 'keluar') {
-      playing = false;
-      break;
-    }
-
-    const diff = choice === '1' ? 'easy' : choice === '2' ? 'medium' : choice === '3' ? 'hard' : null;
-    if (!diff) {
-      console.log('Pilihan tidak valid.');
-      continue;
-    }
-
-    best = await playRound(diff, best);
-    const again = (await ask('\nMain lagi? [y/n]: ')).trim().toLowerCase();
-    if (again !== 'y' && again !== 'ya') playing = false;
-  }
-
-  console.log(`\nSkor terbaikmu: ${best ?? '—'}. Terima kasih sudah bermain!`);
-  rl.close();
-}
-
-main().catch((err) => {
-  console.error('Error:', err);
-  process.exit(1);
-});
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
+// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
+// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
+// screenshots/ and dossier.json).
+writeFileSync(
+  join(out, 'dossier.json'),
+  buildDossier(out, {
+    text_max_bytes: 163840,
+    screenshots: { max: 4, max_bytes: 262144 },
+    game_max_files: 993,
+    game_max_bytes: 50331648,
+    game_path_max_bytes: 1000,
+  }),
+);
