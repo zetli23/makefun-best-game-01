@@ -1,0 +1,10 @@
+{
+  "name": "zeins-number-duel",
+  "version": "1.0.0",
+  "description": "A minimal number-guessing game for Node 22",
+  "main": "main.ts",
+  "scripts": {
+    "start": "node main.ts"
+  },
+  "license": "MIT"
+}
